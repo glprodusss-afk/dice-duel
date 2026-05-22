@@ -145,16 +145,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// Обработка Telegram deep link: перенаправляем пользователя в Mini App с параметром
-app.get('/start', (req, res) => {
-  const startParam = req.query.startapp;
-  if (startParam) {
-    // Перенаправляем на index.html, сохраняя startapp параметр в URL-хеше, чтобы клиентский JS мог его прочитать.
-    res.redirect(`/?startapp=${startParam}`);
-  } else {
-    res.redirect('/');
-  }
-});
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
