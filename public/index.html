@@ -24,6 +24,7 @@
       flex-direction: column;
       height: 100vh;
       overflow: hidden;
+      user-select: none;
     }
     .chat-container {
       flex: 1;
@@ -31,13 +32,14 @@
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
     }
     .system-message {
       text-align: center;
       color: var(--tg-theme-hint);
-      font-size: 14px;
-      margin: 8px 0;
+      font-size: 13px;
+      margin: 6px 0;
+      font-weight: 500;
     }
     .message {
       max-width: 80%;
@@ -46,6 +48,11 @@
       font-size: 16px;
       line-height: 1.4;
       word-break: break-word;
+      animation: msgIn 0.3s ease-out;
+    }
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     .message-left {
       align-self: flex-start;
@@ -58,31 +65,102 @@
       color: var(--tg-theme-button-text);
       border-bottom-right-radius: 4px;
     }
-    .dice-number {
-      font-size: 48px;
-      font-weight: bold;
+    .dice-roll-msg {
       text-align: center;
-      display: block;
-    }
-    .dice-label {
-      font-size: 12px;
-      opacity: 0.7;
+      font-size: 22px;
+      font-weight: bold;
+      padding: 12px;
     }
     .sum-message {
       background: #ffe0b2;
       color: #333;
       align-self: center;
       font-weight: bold;
+      font-size: 18px;
+      border-radius: 20px;
+      padding: 8px 18px;
     }
-    .gif-message {
-      background: transparent;
-      padding: 4px;
-      max-width: 70%;
-    }
-    .gif-message img {
+
+    /* АНИМАЦИИ ПОБЕДЫ / ПОРАЖЕНИЯ */
+    .anim-container {
+      position: fixed;
+      top: 0;
+      left: 0;
       width: 100%;
-      border-radius: 12px;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
     }
+    .confetti {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      animation: confettiFall 1.5s ease-out forwards;
+    }
+    @keyframes confettiFall {
+      0% { transform: translateY(-100px) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+    }
+    .rain-text {
+      position: absolute;
+      font-size: 32px;
+      animation: rainDrop 2s ease-in forwards;
+      opacity: 0;
+    }
+    @keyframes rainDrop {
+      0% { transform: translateY(-50px); opacity: 1; }
+      70% { opacity: 1; }
+      100% { transform: translateY(105vh); opacity: 0; }
+    }
+
+    /* 3D КУБИК */
+    .dice-scene {
+      width: 80px;
+      height: 80px;
+      perspective: 200px;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .dice-cube {
+      width: 80px;
+      height: 80px;
+      position: relative;
+      transform-style: preserve-3d;
+      transform: rotateX(-20deg) rotateY(-25deg);
+      transition: transform 0.1s;
+    }
+    .dice-cube.rolling {
+      animation: rollDice 0.6s ease-out;
+    }
+    @keyframes rollDice {
+      0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+      25% { transform: rotateX(180deg) rotateY(90deg) rotateZ(45deg); }
+      50% { transform: rotateX(360deg) rotateY(180deg) rotateZ(90deg); }
+      75% { transform: rotateX(540deg) rotateY(270deg) rotateZ(135deg); }
+      100% { transform: rotateX(720deg) rotateY(360deg) rotateZ(180deg); }
+    }
+    .dice-face {
+      position: absolute;
+      width: 80px;
+      height: 80px;
+      background: #ffffff;
+      border: 2px solid #ddd;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      font-weight: bold;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+    }
+    .dice-face.front  { transform: translateZ(40px); }
+    .dice-face.back   { transform: rotateY(180deg) translateZ(40px); }
+    .dice-face.right  { transform: rotateY(90deg) translateZ(40px); }
+    .dice-face.left   { transform: rotateY(-90deg) translateZ(40px); }
+    .dice-face.top    { transform: rotateX(90deg) translateZ(40px); }
+    .dice-face.bottom { transform: rotateX(-90deg) translateZ(40px); }
+
     .bottom-panel {
       padding: 12px 16px;
       background: var(--tg-theme-secondary-bg);
@@ -91,6 +169,7 @@
       justify-content: center;
       gap: 12px;
       border-top: 1px solid rgba(0,0,0,0.1);
+      flex-wrap: wrap;
     }
     .btn {
       background: var(--tg-theme-button);
@@ -101,10 +180,12 @@
       font-size: 16px;
       font-weight: 600;
       cursor: pointer;
-      transition: transform 0.1s;
+      transition: transform 0.1s, box-shadow 0.1s;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
     .btn:active {
       transform: scale(0.96);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     .btn:disabled {
       opacity: 0.5;
@@ -112,29 +193,35 @@
     }
     .dice-btn {
       background: #f44336;
-      font-size: 32px;
-      padding: 8px 20px;
+      font-size: 20px;
+      padding: 14px 28px;
       border-radius: 20px;
       animation: pulse 1.5s infinite;
+      box-shadow: 0 4px 12px rgba(244,67,54,0.4);
     }
     @keyframes pulse {
-      0% { box-shadow: 0 0 0 0 rgba(244,67,54,0.4); }
-      70% { box-shadow: 0 0 0 15px rgba(244,67,54,0); }
+      0% { box-shadow: 0 0 0 0 rgba(244,67,54,0.6); }
+      70% { box-shadow: 0 0 0 16px rgba(244,67,54,0); }
       100% { box-shadow: 0 0 0 0 rgba(244,67,54,0); }
     }
     .waiting-text {
       color: var(--tg-theme-hint);
       font-style: italic;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    .invite-link {
-      background: var(--tg-theme-secondary-bg);
-      padding: 12px;
-      border-radius: 12px;
-      text-align: center;
-      margin: 8px 0;
+    .waiting-dots::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
     }
-    .hidden {
-      display: none !important;
+    @keyframes dots {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+      100% { content: ''; }
     }
     input {
       font-size: 16px;
@@ -142,14 +229,23 @@
       border-radius: 12px;
       border: 1px solid #ccc;
       flex: 1;
+      min-width: 100px;
+    }
+    .code-display {
+      font-size: 28px;
+      font-weight: bold;
+      letter-spacing: 4px;
+      background: var(--tg-theme-secondary-bg);
+      padding: 6px 16px;
+      border-radius: 12px;
+      margin: 0 4px;
     }
   </style>
 </head>
 <body>
   <div class="chat-container" id="chat"></div>
-  <div class="bottom-panel" id="bottom">
-    <!-- dynamic content -->
-  </div>
+  <div class="anim-container" id="animContainer"></div>
+  <div class="bottom-panel" id="bottom"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -160,11 +256,63 @@
 
     const chat = document.getElementById('chat');
     const bottom = document.getElementById('bottom');
+    const animContainer = document.getElementById('animContainer');
     const socket = io();
 
     let roomId = null;
     let myId = null;
 
+    // === ЗВУКИ (Web Audio API) ===
+    function playSound(freq, type, duration, vol = 0.3) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        gain.gain.setValueAtTime(vol, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + duration);
+      } catch(e) {}
+    }
+    function soundRoll() { playSound(200, 'triangle', 0.3, 0.2); }
+    function soundWin() { playSound(523, 'square', 0.15, 0.3); setTimeout(()=>playSound(659, 'square', 0.15, 0.3), 150); setTimeout(()=>playSound(784, 'square', 0.2, 0.4), 300); }
+    function soundLose() { playSound(200, 'sawtooth', 0.5, 0.2); setTimeout(()=>playSound(150, 'sawtooth', 0.5, 0.3), 200); }
+
+    // === АНИМАЦИИ ПОБЕДЫ / ПОРАЖЕНИЯ ===
+    function launchConfetti() {
+      const colors = ['#ff4d4d','#ffcc00','#33cc33','#3399ff','#ff66b2','#ff9900','#9933ff'];
+      for (let i = 0; i < 60; i++) {
+        setTimeout(() => {
+          const el = document.createElement('div');
+          el.className = 'confetti';
+          el.style.left = Math.random() * 100 + '%';
+          el.style.background = colors[Math.floor(Math.random() * colors.length)];
+          el.style.animationDuration = (Math.random() * 1 + 1.5) + 's';
+          animContainer.appendChild(el);
+          setTimeout(() => el.remove(), 2000);
+        }, i * 15);
+      }
+    }
+
+    function launchRain(emoji) {
+      for (let i = 0; i < 20; i++) {
+        setTimeout(() => {
+          const el = document.createElement('div');
+          el.className = 'rain-text';
+          el.textContent = emoji;
+          el.style.left = Math.random() * 90 + '%';
+          el.style.animationDuration = (Math.random() * 1 + 1.5) + 's';
+          animContainer.appendChild(el);
+          setTimeout(() => el.remove(), 2500);
+        }, i * 80);
+      }
+    }
+
+    // === СООБЩЕНИЯ В ЧАТ ===
     function addSystemMessage(text) {
       const div = document.createElement('div');
       div.className = 'system-message';
@@ -173,22 +321,11 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
-    function addMessage(side, content, isHtml = false) {
+    function addDiceRollMessage(side, number) {
       const div = document.createElement('div');
-      div.className = `message message-${side}`;
-      if (isHtml) {
-        div.innerHTML = content;
-      } else {
-        div.textContent = content;
-      }
-      chat.appendChild(div);
-      chat.scrollTop = chat.scrollHeight;
-    }
-
-    function addDiceMessage(side, number) {
-      const div = document.createElement('div');
-      div.className = `message message-${side}`;
-      div.innerHTML = `<span class="dice-number">${number}</span><span class="dice-label">кубик</span>`;
+      div.className = `message message-${side} dice-roll-msg`;
+      // 3D кубик с итоговым значением
+      div.innerHTML = `<div class="dice-scene"><div class="dice-cube"><div class="dice-face front">${number}</div><div class="dice-face back">${number}</div><div class="dice-face right">${number}</div><div class="dice-face left">${number}</div><div class="dice-face top">${number}</div><div class="dice-face bottom">${number}</div></div></div>`;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
@@ -201,56 +338,75 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
-    function addGifMessage(side, gifUrl) {
+    function addEmojiMessage(side, emoji, text) {
       const div = document.createElement('div');
-      div.className = `message message-${side} gif-message`;
-      div.innerHTML = `<img src="${gifUrl}" alt="gif">`;
+      div.className = `message message-${side}`;
+      div.style.fontSize = '36px';
+      div.style.textAlign = 'center';
+      div.style.background = 'transparent';
+      div.style.color = 'var(--tg-theme-text)';
+      div.innerHTML = `${emoji}<br><span style="font-size:14px;">${text}</span>`;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
 
+    // === ОТРИСОВКА КНОПОК ===
     function renderWaitingForPlayer() {
-      addSystemMessage(`Код комнаты: ${roomId}`);
+      addSystemMessage(`Код комнаты:`);
+      const codeDiv = document.createElement('div');
+      codeDiv.className = 'system-message';
+      codeDiv.innerHTML = `<span class="code-display">${roomId}</span>`;
+      chat.appendChild(codeDiv);
+      chat.scrollTop = chat.scrollHeight;
       bottom.innerHTML = `
         <button class="btn" id="copyCodeBtn">📋 Скопировать код</button>
-        <span style="font-size:14px;">Отправь код другу, чтобы он присоединился</span>
+        <span style="font-size:14px;">Отправь код другу</span>
       `;
       document.getElementById('copyCodeBtn').addEventListener('click', () => {
         navigator.clipboard.writeText(roomId).then(() => {
-          tg.showAlert('Код скопирован! Отправь его другу.');
+          tg.showAlert('Код скопирован!');
         });
       });
     }
 
     function renderYourTurn() {
-      bottom.innerHTML = `<button class="btn dice-btn" id="rollBtn">🎲 Бросить</button>`;
+      bottom.innerHTML = `<button class="btn dice-btn" id="rollBtn">🎲 Бросить кубик</button>`;
       document.getElementById('rollBtn').addEventListener('click', () => {
         socket.emit('roll_dice', roomId);
-        bottom.innerHTML = `<span class="waiting-text">Бросаем...</span>`;
+        soundRoll();
+        bottom.innerHTML = `<span class="waiting-text"><span class="waiting-dots">Бросаем</span></span>`;
       });
     }
 
     function renderOpponentTurn() {
-      bottom.innerHTML = `<span class="waiting-text">Ход соперника...</span>`;
+      bottom.innerHTML = `<span class="waiting-text">🎲 Ход соперника <span class="waiting-dots"></span></span>`;
     }
 
-    function renderGameOver(winnerId, p1, p2, gifs) {
+    function renderGameOver(winnerId, p1, p2) {
       bottom.innerHTML = `<button class="btn" id="playAgainBtn">🔄 Сыграть ещё</button>`;
       document.getElementById('playAgainBtn').addEventListener('click', () => {
         socket.emit('play_again', roomId);
         chat.innerHTML = '';
+        animContainer.innerHTML = '';
       });
 
       if (winnerId === null) {
         addSystemMessage('Ничья! 🤝');
-        addGifMessage('right', gifs[p1.id]);
-        addGifMessage('left', gifs[p2.id]);
+        addEmojiMessage('right', '🤝', 'Ничья');
+        addEmojiMessage('left', '🤝', 'Ничья');
+        launchConfetti();
+      } else if (winnerId === myId) {
+        addSystemMessage('Вы победили! 🏆');
+        addEmojiMessage('right', '🏆', 'Победитель');
+        addEmojiMessage('left', '😿', 'Проиграл');
+        launchConfetti();
+        soundWin();
       } else {
-        const winnerName = winnerId === p1.id ? 'Игрок 1' : 'Игрок 2';
-        const loserName = winnerId === p1.id ? 'Игрок 2' : 'Игрок 1';
-        addSystemMessage(`${winnerName} победил! 🎉`);
-        addGifMessage('right', gifs[winnerId]);
-        addGifMessage('left', gifs[winnerId === p1.id ? p2.id : p1.id]);
+        addSystemMessage('Вы проиграли... 😢');
+        addEmojiMessage('left', '😿', 'Проиграл');
+        addEmojiMessage('right', '🏆', 'Победитель');
+        launchRain('💧');
+        soundLose();
       }
     }
 
@@ -290,40 +446,25 @@
       document.getElementById('joinInputBtn').addEventListener('click', showJoinInput);
     }
 
-    // При загрузке показываем выбор
     showStartChoice();
 
-    socket.on('connect', () => {
-      myId = socket.id;
-    });
-
-    socket.on('player_joined', () => {
-      addSystemMessage('Игрок 2 присоединился!');
-    });
-
-    socket.on('game_started', (data) => {
-      addSystemMessage('Игра началась!');
-    });
-
-    socket.on('your_turn', () => {
-      renderYourTurn();
-    });
-
-    socket.on('opponent_turn', () => {
-      renderOpponentTurn();
-    });
+    socket.on('connect', () => { myId = socket.id; });
+    socket.on('player_joined', () => { addSystemMessage('Игрок 2 присоединился!'); });
+    socket.on('game_started', () => { addSystemMessage('Игра началась! Бросайте кубики!'); });
+    socket.on('your_turn', () => { renderYourTurn(); });
+    socket.on('opponent_turn', () => { renderOpponentTurn(); });
 
     socket.on('dice_rolled', (data) => {
       const side = data.player === myId ? 'right' : 'left';
-      addDiceMessage(side, data.roll);
+      addDiceRollMessage(side, data.roll);
       if (data.dice.length === 3) {
         const sum = data.dice.reduce((a, b) => a + b, 0);
-        setTimeout(() => addSumMessage(sum), 300);
+        setTimeout(() => addSumMessage(sum), 400);
       }
     });
 
     socket.on('game_over', (data) => {
-      renderGameOver(data.winner, data.p1, data.p2, data.gifs);
+      renderGameOver(data.winner, data.p1, data.p2);
     });
 
     socket.on('player_left', () => {
@@ -334,6 +475,7 @@
     socket.on('game_reset', () => {
       addSystemMessage('Новая игра!');
       chat.innerHTML = '';
+      animContainer.innerHTML = '';
     });
 
     socket.on('error_message', (msg) => {
