@@ -259,8 +259,15 @@
     // Определяем deep link параметр
     var startParam = null;
     if (tg && tg.initDataUnsafe) {
-      startParam = tg.initDataUnsafe.start_param;
-    }
+      // Пробуем взять start_param из Telegram, затем из URL (?startapp=), затем из хеша
+let startParam = tg.initDataUnsafe.start_param;
+if (!startParam) {
+  const urlParams = new URLSearchParams(window.location.search);
+  startParam = urlParams.get('startapp');
+}
+if (!startParam) {
+  startParam = window.location.hash.substring(1); // на случай, если мы передадим через хеш
+}
 
     if (startParam) {
       roomId = startParam;
