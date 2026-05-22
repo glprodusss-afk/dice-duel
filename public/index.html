@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кости — Мультиплеер</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
 <style>
   :root {
     --tg-bg: var(--tg-theme-bg-color, #ffffff);
@@ -176,14 +176,6 @@
     align-self: center;
     justify-self: center;
   }
-  /* Dot layouts per face */
-  .face-1 { grid-template: 1fr/1fr; }
-  .face-2 { grid-template: 1fr 1fr/1fr; gap: 2px; }
-  .face-3 { grid-template: 1fr 1fr 1fr/1fr; gap: 1px; }
-  .face-4 { grid-template: 1fr 1fr/1fr 1fr; gap: 2px; }
-  .face-5 { grid-template: 1fr 1fr 1fr/1fr 1fr; gap: 1px; }
-  .face-6 { grid-template: 1fr 1fr 1fr/1fr 1fr; gap: 1px; }
-
   .dice-result-text { font-size: 22px; font-weight: 700; }
 
   /* ── Screens ── */
@@ -436,17 +428,18 @@
   </div>
 
   <div id="join-panel" class="hidden w-full flex-col" style="gap:10px;margin-top:4px">
-    <input id="join-code" class="tg-input" type="text" inputmode="numeric"
-           maxlength="4" placeholder="Введи код" oninput="this.value=this.value.replace(/\D/g,'')">
+    <input id="join-code" class="tg-input" type="text" inputmode="text"
+           maxlength="6" placeholder="Введи код" style="letter-spacing:4px;text-transform:uppercase;">
     <button class="btn btn-primary" onclick="joinGame()">Подключиться →</button>
+    <div class="screen-sub" id="join-error" style="color:#ff3b30;display:none;"></div>
   </div>
 
   <div id="created-panel" class="hidden w-full flex-col" style="gap:10px;margin-top:4px;align-items:center">
     <div class="code-box">
       <div class="code-label">Код игры</div>
-      <div class="code-value" id="game-code-display">----</div>
+      <div class="code-value" id="game-code-display">------</div>
     </div>
-    <button class="btn btn-ghost btn-sm" onclick="copyCode()">📋 Скопировать код</button>
+    <button class="btn btn-ghost btn-sm" id="copy-code-btn">📋 Скопировать код</button>
     <div class="screen-sub" style="margin-top:4px">Ожидаем второго игрока…</div>
     <div class="waiting-spinner" style="margin-top:8px"></div>
   </div>
@@ -465,15 +458,15 @@
 
   <!-- Scores -->
   <div id="scores-bar">
-    <div class="score-card" id="score-p1">
-      <div class="score-name" id="score-name-p1">Игрок 1</div>
-      <div class="score-val" id="score-val-p1">0</div>
-      <div class="score-throws" id="score-throws-p1">0/3 бросков</div>
+    <div class="score-card" id="score-card-me">
+      <div class="score-name" id="score-name-me">Вы</div>
+      <div class="score-val" id="score-val-me">0</div>
+      <div class="score-throws" id="score-throws-me">0/3 бросков</div>
     </div>
-    <div class="score-card" id="score-p2">
-      <div class="score-name" id="score-name-p2">Игрок 2</div>
-      <div class="score-val" id="score-val-p2">0</div>
-      <div class="score-throws" id="score-throws-p2">0/3 бросков</div>
+    <div class="score-card" id="score-card-opp">
+      <div class="score-name" id="score-name-opp">Соперник</div>
+      <div class="score-val" id="score-val-opp">0</div>
+      <div class="score-throws" id="score-throws-opp">0/3 бросков</div>
     </div>
   </div>
 
@@ -502,7 +495,7 @@
   </div>
 
   <div style="width:100%;display:flex;flex-direction:column;gap:10px;margin-top:8px">
-    <button class="btn btn-primary" onclick="resetGame()">🎮 Играть ещё</button>
+    <button class="btn btn-primary" id="play-again-btn">🎮 Играть ещё</button>
   </div>
 </div>
 
@@ -513,314 +506,225 @@
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
-const myName = tg?.initDataUnsafe?.user?.first_name || 'Игрок ' + Math.floor(Math.random()*100);
+const myName = tg?.initDataUnsafe?.user?.first_name || 'Вы';
+const oppDefaultName = 'Соперник';
 
 // ══════════════════════════════════════════════════════════
 //  Game state
 // ══════════════════════════════════════════════════════════
-let socket = null;
-let gameCode = null;
-let myRole = null;      // 'p1' | 'p2'
+const socket = io({ transports: ['websocket', 'polling'] });
+let roomId = null;
+let myId = null;
 let myTurn = false;
-let players = { p1: { name: 'Игрок 1', score: 0, throws: 0 },
-                p2: { name: 'Игрок 2', score: 0, throws: 0 } };
+let myScore = 0, oppScore = 0;
+let myThrows = 0, oppThrows = 0;
+let oppName = oppDefaultName;
 const MAX_THROWS = 3;
 const GIPHY_KEY = 'p6l8yF0x9aPR5bLxH5z3v6q2wR1t4y7j';
+let gameOver = false;
 
 // ══════════════════════════════════════════════════════════
-//  Socket.IO (graceful fallback when server unavailable)
+//  Socket events (matching server.js exactly)
 // ══════════════════════════════════════════════════════════
-function initSocket() {
-  try {
-    socket = io({ transports: ['websocket'], reconnection: false, timeout: 3000 });
+socket.on('connect', () => {
+  myId = socket.id;
+  console.log('Connected:', myId);
+});
 
-    socket.on('connect', () => console.log('Socket connected'));
-    socket.on('game_created', ({ code }) => {
-      gameCode = code;
-      document.getElementById('game-code-display').textContent = code;
-      document.getElementById('created-panel').classList.remove('hidden');
-      document.getElementById('join-panel').classList.add('hidden');
-    });
-    socket.on('game_joined', ({ code, role, players: pl }) => startGame(code, role, pl));
-    socket.on('roll', ({ role, value, scores }) => handleRemoteRoll(role, value, scores));
-    socket.on('game_full', () => alert('Эта игра уже заполнена'));
-    socket.on('error', (msg) => alert('Ошибка: ' + msg));
-    socket.on('connect_error', useFallbackMode);
-  } catch(e) { useFallbackMode(); }
-}
+socket.on('player_joined', () => {
+  document.getElementById('game-status-text').textContent = 'Игрок найден!';
+  addMessage('center', '🎮 Игрок 2 присоединился!');
+});
 
-// Fallback: local single-device demo mode
-let fallbackMode = false;
-function useFallbackMode() {
-  fallbackMode = true;
-  console.log('Running in local demo mode');
-}
+socket.on('game_started', (data) => {
+  document.getElementById('created-panel').classList.add('hidden');
+  document.getElementById('screen-start').classList.add('hidden');
+  document.getElementById('screen-game').classList.remove('hidden');
+  addMessage('center', '🎲 Игра началась! Бросайте кубики по очереди.');
+});
 
-function emitOrFallback(event, data) {
-  if (socket?.connected) socket.emit(event, data);
-}
+socket.on('your_turn', () => {
+  myTurn = true;
+  updateTurnUI();
+});
+
+socket.on('opponent_turn', () => {
+  myTurn = false;
+  updateTurnUI();
+});
+
+socket.on('dice_rolled', (data) => {
+  const isMine = data.player === myId;
+  if (isMine) {
+    myScore += data.roll;
+    myThrows = data.dice.length;
+  } else {
+    oppScore += data.roll;
+    oppThrows = data.dice.length;
+  }
+  updateScores();
+  addDiceMessage(isMine ? 'out' : 'in', data.roll, isMine ? myThrows : oppThrows);
+});
+
+socket.on('game_over', (data) => {
+  gameOver = true;
+  const iAmP1 = data.p1.id === myId;
+  const myData = iAmP1 ? data.p1 : data.p2;
+  const oppData = iAmP1 ? data.p2 : data.p1;
+  myScore = myData.sum;
+  oppScore = oppData.sum;
+  myThrows = MAX_THROWS;
+  oppThrows = MAX_THROWS;
+  updateScores();
+
+  const winnerId = data.winner;
+  const gifUrl = data.gifs[myId];
+  setTimeout(() => showResult(winnerId, gifUrl, iAmP1 ? data.p1 : data.p2, iAmP1 ? data.p2 : data.p1), 500);
+});
+
+socket.on('player_left', () => {
+  if (!gameOver) {
+    addMessage('center', '😢 Соперник покинул игру');
+    document.getElementById('game-status-text').textContent = 'Игрок вышел';
+    document.getElementById('roll-btn').disabled = true;
+  }
+});
+
+socket.on('game_reset', () => {
+  resetGameState();
+  document.getElementById('screen-result').classList.add('hidden');
+  document.getElementById('screen-game').classList.remove('hidden');
+  document.getElementById('chat').innerHTML = '';
+  document.getElementById('fx-layer').innerHTML = '';
+  addMessage('center', '🔄 Новая игра!');
+});
+
+socket.on('error_message', (msg) => {
+  document.getElementById('join-error').textContent = '⚠️ ' + msg;
+  document.getElementById('join-error').style.display = 'block';
+});
 
 // ══════════════════════════════════════════════════════════
-//  Start screen logic
+//  UI functions
 // ══════════════════════════════════════════════════════════
 function createGame() {
-  initSocket();
-  const code = String(Math.floor(1000 + Math.random() * 9000));
-  gameCode = code;
-  document.getElementById('game-code-display').textContent = code;
-  document.getElementById('created-panel').classList.remove('hidden');
-
-  if (!fallbackMode && socket) {
-    setTimeout(() => {
-      if (!fallbackMode) emitOrFallback('create_game', { code, name: myName });
-    }, 600);
-  }
-
-  // In demo mode: auto-join as P1 after showing code
-  if (fallbackMode) {
-    startGame(code, 'p1', { p1: myName, p2: 'Бот 🤖' });
-  } else {
-    // Wait for connect, then emit
-    const tryEmit = setInterval(() => {
-      if (socket?.connected) {
-        socket.emit('create_game', { code, name: myName });
-        clearInterval(tryEmit);
-      }
-      if (fallbackMode) {
-        clearInterval(tryEmit);
-        startGame(code, 'p1', { p1: myName, p2: 'Бот 🤖' });
-      }
-    }, 200);
-    setTimeout(() => {
-      clearInterval(tryEmit);
-      if (!socket?.connected) {
-        useFallbackMode();
-        startGame(code, 'p1', { p1: myName, p2: 'Бот 🤖' });
-      }
-    }, 4000);
-  }
+  socket.emit('create_room', (res) => {
+    roomId = res.roomId;
+    document.getElementById('game-code-display').textContent = roomId;
+    document.getElementById('join-panel').classList.add('hidden');
+    document.getElementById('created-panel').classList.remove('hidden');
+  });
 }
 
 function showJoinPanel() {
-  document.getElementById('join-panel').classList.toggle('hidden');
+  document.getElementById('join-panel').classList.remove('hidden');
   document.getElementById('created-panel').classList.add('hidden');
+  document.getElementById('join-error').style.display = 'none';
 }
 
 function joinGame() {
-  const code = document.getElementById('join-code').value.trim();
-  if (code.length !== 4) { alert('Введи 4-значный код'); return; }
-  initSocket();
-  gameCode = code;
-
-  if (fallbackMode) {
-    startGame(code, 'p2', { p1: 'Игрок 1', p2: myName });
+  const code = document.getElementById('join-code').value.trim().toLowerCase();
+  if (code.length !== 6) {
+    document.getElementById('join-error').textContent = 'Введи 6-значный код';
+    document.getElementById('join-error').style.display = 'block';
     return;
   }
-
-  const tryEmit = setInterval(() => {
-    if (socket?.connected) {
-      socket.emit('join_game', { code, name: myName });
-      clearInterval(tryEmit);
+  roomId = code;
+  socket.emit('join_room', roomId, (res) => {
+    if (res.error) {
+      document.getElementById('join-error').textContent = 'Ошибка: ' + res.error;
+      document.getElementById('join-error').style.display = 'block';
+    } else {
+      document.getElementById('join-error').style.display = 'none';
+      document.getElementById('join-panel').classList.add('hidden');
     }
-    if (fallbackMode) {
-      clearInterval(tryEmit);
-      startGame(code, 'p2', { p1: 'Игрок 1', p2: myName });
-    }
-  }, 200);
-  setTimeout(() => {
-    clearInterval(tryEmit);
-    if (!socket?.connected) {
-      useFallbackMode();
-      startGame(code, 'p2', { p1: 'Игрок 1', p2: myName });
-    }
-  }, 4000);
-}
-
-function copyCode() {
-  const code = document.getElementById('game-code-display').textContent;
-  navigator.clipboard?.writeText(code).then(() => {
-    const btn = event.target;
-    btn.textContent = '✅ Скопировано!';
-    setTimeout(() => btn.textContent = '📋 Скопировать код', 1500);
   });
 }
 
-// ══════════════════════════════════════════════════════════
-//  Game flow
-// ══════════════════════════════════════════════════════════
-function startGame(code, role, playerNames) {
-  gameCode = code;
-  myRole = role;
-  players.p1.name = playerNames.p1 || 'Игрок 1';
-  players.p2.name = playerNames.p2 || 'Игрок 2';
-  players.p1.score = 0; players.p1.throws = 0;
-  players.p2.score = 0; players.p2.throws = 0;
+// Copy code button
+document.getElementById('copy-code-btn').addEventListener('click', function() {
+  const code = document.getElementById('game-code-display').textContent;
+  navigator.clipboard?.writeText(code).then(() => {
+    this.textContent = '✅ Скопировано!';
+    setTimeout(() => { this.textContent = '📋 Скопировать код'; }, 1500);
+  });
+});
 
-  document.getElementById('screen-start').classList.add('hidden');
-  document.getElementById('screen-game').classList.remove('hidden');
-
-  document.getElementById('score-name-p1').textContent = players.p1.name;
-  document.getElementById('score-name-p2').textContent = players.p2.name;
-  updateScores();
-
-  // P1 goes first
-  myTurn = (myRole === 'p1');
+function rollDice() {
+  if (!myTurn || gameOver) return;
+  socket.emit('roll_dice', roomId);
+  myTurn = false;
   updateTurnUI();
-
-  addMessage('center', `🎮 Игра началась! Код: ${code}`);
-  addMessage('center', `${players.p1.name} ходит первым`);
+  playDiceSound();
 }
 
 function updateScores() {
-  ['p1','p2'].forEach(r => {
-    document.getElementById('score-val-'+r).textContent = players[r].score;
-    document.getElementById('score-throws-'+r).textContent = players[r].throws + '/3 бросков';
-  });
-  const bothDone = players.p1.throws >= MAX_THROWS && players.p2.throws >= MAX_THROWS;
-  document.getElementById('score-p1').classList.toggle('active', myTurn && myRole === 'p1');
-  document.getElementById('score-p2').classList.toggle('active', myTurn && myRole === 'p2');
+  document.getElementById('score-val-me').textContent = myScore;
+  document.getElementById('score-val-opp').textContent = oppScore;
+  document.getElementById('score-throws-me').textContent = myThrows + '/3 бросков';
+  document.getElementById('score-throws-opp').textContent = oppThrows + '/3 бросков';
+  document.getElementById('score-card-me').classList.toggle('active', myTurn);
+  document.getElementById('score-card-opp').classList.toggle('active', !myTurn && !gameOver);
 }
 
 function updateTurnUI() {
   const indicator = document.getElementById('turn-indicator');
   const btn = document.getElementById('roll-btn');
-  if (myTurn) {
+  if (gameOver) {
+    indicator.textContent = 'Игра завершена';
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+    document.getElementById('game-status-text').textContent = 'Конец игры';
+  } else if (myTurn) {
     indicator.textContent = '⬆️ Ваш ход — бросьте кубик!';
     btn.disabled = false;
     btn.style.opacity = '1';
+    document.getElementById('game-status-text').textContent = 'Ваш ход';
   } else {
-    const other = myRole === 'p1' ? players.p2.name : players.p1.name;
-    indicator.textContent = `⏳ Ход ${other}…`;
+    indicator.textContent = '⏳ Ход соперника…';
     btn.disabled = true;
     btn.style.opacity = '0.5';
-  }
-  document.getElementById('game-status-text').textContent =
-    myTurn ? 'Ваш ход' : 'Ход соперника…';
-}
-
-// ── Roll ──────────────────────────────────────────────────
-function rollDice() {
-  if (!myTurn) return;
-  const value = Math.ceil(Math.random() * 6);
-  playDiceSound();
-  processRoll(myRole, value);
-
-  if (fallbackMode) {
-    // Demo: bot rolls after short delay
-    myTurn = false;
-    updateTurnUI();
-    if (players.p1.throws < MAX_THROWS || players.p2.throws < MAX_THROWS) {
-      const otherRole = myRole === 'p1' ? 'p2' : 'p1';
-      if (players[otherRole].throws < MAX_THROWS) {
-        setTimeout(() => {
-          const botVal = Math.ceil(Math.random() * 6);
-          playDiceSound();
-          processRoll(otherRole, botVal);
-          const myR = myRole;
-          if (players[myR].throws < MAX_THROWS) {
-            myTurn = true;
-            updateTurnUI();
-          } else {
-            checkGameEnd();
-          }
-        }, 900);
-      } else {
-        checkGameEnd();
-      }
-    } else {
-      checkGameEnd();
-    }
-  } else {
-    emitOrFallback('roll', { code: gameCode, role: myRole, value });
-    myTurn = false;
-    updateTurnUI();
-  }
-}
-
-function handleRemoteRoll(role, value, scores) {
-  processRoll(role, value, false);
-  if (scores) {
-    players.p1.score = scores.p1;
-    players.p2.score = scores.p2;
-    updateScores();
-  }
-  const otherRole = myRole === 'p1' ? 'p2' : 'p1';
-  if (role === otherRole) {
-    if (players[myRole].throws < MAX_THROWS) {
-      myTurn = true;
-      updateTurnUI();
-    } else {
-      checkGameEnd();
-    }
-  }
-}
-
-function processRoll(role, value, updateTurnAfter = true) {
-  players[role].score += value;
-  players[role].throws++;
-  updateScores();
-
-  const isMine = role === myRole;
-  addDiceMessage(role, value, isMine);
-
-  if (players.p1.throws >= MAX_THROWS && players.p2.throws >= MAX_THROWS) {
-    setTimeout(showResult, 600);
-  }
-}
-
-function checkGameEnd() {
-  if (players.p1.throws >= MAX_THROWS && players.p2.throws >= MAX_THROWS) {
-    setTimeout(showResult, 600);
+    document.getElementById('game-status-text').textContent = 'Ход соперника';
   }
 }
 
 // ══════════════════════════════════════════════════════════
 //  Chat messages
 // ══════════════════════════════════════════════════════════
-function addMessage(type, text, senderName = '') {
+function addMessage(type, text) {
   const chat = document.getElementById('chat');
   const wrap = document.createElement('div');
   wrap.className = 'msg-wrap ' + type;
-
   const now = new Date();
   const time = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
-
-  let inner = '';
-  if (type === 'in' && senderName) {
-    inner += `<div class="sender-name">${senderName}</div>`;
-  }
-  inner += `<div class="bubble">${text}<div class="msg-time">${time}</div></div>`;
-  wrap.innerHTML = inner;
+  wrap.innerHTML = `<div class="bubble">${text}<div class="msg-time">${time}</div></div>`;
   chat.appendChild(wrap);
   chat.scrollTop = chat.scrollHeight;
 }
 
-function addDiceMessage(role, value, isMine) {
+function addDiceMessage(type, value, throwNum) {
   const chat = document.getElementById('chat');
   const wrap = document.createElement('div');
-  const type = isMine ? 'out' : 'in';
   wrap.className = 'msg-wrap ' + type;
-
-  const pName = players[role].name;
   const now = new Date();
   const time = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
-
-  const diceHtml = buildDiceFaceHtml(value);
+  const whoLabel = type === 'out' ? 'Вы бросили' : oppName + ' бросил';
+  const senderName = type === 'in' ? oppName : '';
 
   let inner = '';
-  if (!isMine) inner += `<div class="sender-name">${pName}</div>`;
+  if (senderName) inner += `<div class="sender-name">${senderName}</div>`;
   inner += `
     <div class="bubble">
       <div class="dice-msg">
         <div class="dice-3d-wrap">
-          <div class="dice-3d rolling" id="dice-anim-${Date.now()}" data-val="${value}">
+          <div class="dice-3d rolling">
             ${buildAllFaces(value)}
           </div>
         </div>
         <div>
-          <div style="font-size:12px;opacity:0.7;margin-bottom:2px">${isMine ? 'Вы бросили' : pName + ' бросил'}</div>
+          <div style="font-size:12px;opacity:0.7;margin-bottom:2px">${whoLabel}</div>
           <div class="dice-result-text">+${value}</div>
-          <div style="font-size:11px;opacity:0.65;margin-top:2px">Бросок ${players[role].throws}/${MAX_THROWS}</div>
+          <div style="font-size:11px;opacity:0.65;margin-top:2px">Бросок ${throwNum}/${MAX_THROWS}</div>
         </div>
       </div>
       <div class="msg-time">${time}</div>
@@ -830,44 +734,19 @@ function addDiceMessage(role, value, isMine) {
   chat.scrollTop = chat.scrollHeight;
 }
 
-function buildDots(n) {
-  return Array(n).fill('<div class="dot"></div>').join('');
-}
-
-function buildFace(n, extraStyle='') {
-  const layouts = {
-    1: `<div class="dice-face face-1" style="${extraStyle}">${buildDots(1)}</div>`,
-    2: `<div class="dice-face face-2" style="${extraStyle}">${buildDots(2)}</div>`,
-    3: `<div class="dice-face face-3" style="${extraStyle}">${buildDots(3)}</div>`,
-    4: `<div class="dice-face face-4" style="${extraStyle}">${buildDots(4)}</div>`,
-    5: `<div class="dice-face face-5" style="${extraStyle}">${buildDots(4)}<div class="dot" style="grid-column:1/3;justify-self:center"></div></div>`,
-    6: `<div class="dice-face face-6" style="${extraStyle}">${buildDots(6)}</div>`,
-  };
-  return layouts[n] || layouts[1];
-}
-
-// Opposite faces: 1-6, 2-5, 3-4
-const oppositePairs = { 1:6, 6:1, 2:5, 5:2, 3:4, 4:3 };
-
 function buildAllFaces(frontVal) {
-  const back = oppositePairs[frontVal] || 1;
-  const vals = [frontVal, back, 3, 4, 2, 5];
   const sides = ['front','back','right','left','top','bottom'];
-  return sides.map((s,i) => {
-    const v = vals[i];
-    return `<div class="dice-face ${s}">${buildDotGrid(v)}</div>`;
-  }).join('');
+  return sides.map(s => `<div class="dice-face ${s}">${buildDotGrid(frontVal)}</div>`).join('');
 }
 
 function buildDotGrid(n) {
-  // Custom grid layouts for each die face
   const grids = {
-    1: '<div style="display:grid;grid-template:1fr/1fr;width:100%;height:100%"><div class="dot"></div></div>',
-    2: '<div style="display:grid;grid-template:1fr 1fr/1fr;width:100%;height:100%;gap:3px"><div class="dot" style="justify-self:end"></div><div class="dot" style="justify-self:start"></div></div>',
-    3: '<div style="display:grid;grid-template:1fr 1fr 1fr/1fr;width:100%;height:100%;gap:2px"><div class="dot" style="justify-self:end"></div><div class="dot" style="justify-self:center"></div><div class="dot" style="justify-self:start"></div></div>',
-    4: '<div style="display:grid;grid-template:1fr 1fr/1fr 1fr;width:100%;height:100%;gap:3px"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>',
-    5: '<div style="display:grid;grid-template:1fr 1fr 1fr/1fr 1fr;width:100%;height:100%;gap:2px"><div class="dot"></div><div class="dot"></div><div class="dot" style="grid-column:1/3;justify-self:center"></div><div class="dot"></div><div class="dot"></div></div>',
-    6: '<div style="display:grid;grid-template:1fr 1fr 1fr/1fr 1fr;width:100%;height:100%;gap:2px"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>',
+    1: '<div style="display:grid;grid-template:1fr/1fr;width:100%;height:100%"><div class="dot" style="justify-self:center;align-self:center"></div></div>',
+    2: '<div style="display:grid;grid-template:1fr 1fr/1fr;width:100%;height:100%;gap:3px"><div class="dot" style="justify-self:end;align-self:start"></div><div class="dot" style="justify-self:start;align-self:end"></div></div>',
+    3: '<div style="display:grid;grid-template:1fr 1fr 1fr/1fr;width:100%;height:100%;gap:2px"><div class="dot" style="justify-self:end;align-self:start"></div><div class="dot" style="justify-self:center;align-self:center"></div><div class="dot" style="justify-self:start;align-self:end"></div></div>',
+    4: '<div style="display:grid;grid-template:1fr 1fr/1fr 1fr;width:100%;height:100%;gap:3px"><div class="dot" style="align-self:start;justify-self:start"></div><div class="dot" style="align-self:start;justify-self:end"></div><div class="dot" style="align-self:end;justify-self:start"></div><div class="dot" style="align-self:end;justify-self:end"></div></div>',
+    5: '<div style="display:grid;grid-template:1fr 1fr 1fr/1fr 1fr;width:100%;height:100%;gap:2px"><div class="dot" style="align-self:start;justify-self:start"></div><div class="dot" style="align-self:start;justify-self:end"></div><div class="dot" style="align-self:center;justify-self:center;grid-column:1/3"></div><div class="dot" style="align-self:end;justify-self:start"></div><div class="dot" style="align-self:end;justify-self:end"></div></div>',
+    6: '<div style="display:grid;grid-template:1fr 1fr 1fr/1fr 1fr;width:100%;height:100%;gap:2px"><div class="dot" style="align-self:start;justify-self:start"></div><div class="dot" style="align-self:start;justify-self:end"></div><div class="dot" style="align-self:center;justify-self:start"></div><div class="dot" style="align-self:center;justify-self:end"></div><div class="dot" style="align-self:end;justify-self:start"></div><div class="dot" style="align-self:end;justify-self:end"></div></div>',
   };
   return grids[n] || grids[1];
 }
@@ -875,13 +754,16 @@ function buildDotGrid(n) {
 // ══════════════════════════════════════════════════════════
 //  Result screen
 // ══════════════════════════════════════════════════════════
-async function showResult() {
-  const s1 = players.p1.score, s2 = players.p2.score;
-  const iWon = (myRole === 'p1' && s1 > s2) || (myRole === 'p2' && s2 > s1);
-  const isDraw = s1 === s2;
+async function showResult(winnerId, gifUrl, p1Data, p2Data) {
+  const iAmP1 = p1Data.id === myId;
+  const myData = iAmP1 ? p1Data : p2Data;
+  const oppData = iAmP1 ? p2Data : p1Data;
 
   document.getElementById('screen-game').classList.add('hidden');
   document.getElementById('screen-result').classList.remove('hidden');
+
+  const isDraw = winnerId === null;
+  const iWon = winnerId === myId;
 
   let emoji, title, sub;
   if (isDraw) {
@@ -898,33 +780,34 @@ async function showResult() {
   document.getElementById('result-title').textContent = title;
   document.getElementById('result-sub').textContent = sub;
 
-  const winnerRole = s1 > s2 ? 'p1' : s2 > s1 ? 'p2' : null;
   const scoresDiv = document.getElementById('result-scores');
-  scoresDiv.innerHTML = ['p1','p2'].map(r => `
-    <div class="result-score-item ${r === winnerRole ? 'winner' : ''}">
-      <div class="rs-name">${players[r].name}</div>
-      <div class="rs-val">${players[r].score}</div>
+  scoresDiv.innerHTML = `
+    <div class="result-score-item ${iWon ? 'winner' : ''}">
+      <div class="rs-name">${myName} (Вы)</div>
+      <div class="rs-val">${myData.sum}</div>
       <div class="rs-label">очков</div>
     </div>
-  `).join('');
+    <div class="result-score-item ${!iWon && !isDraw ? 'winner' : ''}">
+      <div class="rs-name">${oppName}</div>
+      <div class="rs-val">${oppData.sum}</div>
+      <div class="rs-label">очков</div>
+    </div>
+  `;
 
   // GIF
-  const query = isDraw ? 'handshake funny' : iWon ? 'happy victory celebrate' : 'sad losing crying';
-  try {
-    const url = `https://api.giphy.com/v1/gifs/random?api_key=${GIPHY_KEY}&tag=${encodeURIComponent(query)}&rating=g`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    const data = await res.json();
-    const gifUrl = data?.data?.images?.downsized?.url;
-    if (gifUrl) {
-      document.getElementById('gif-img').src = gifUrl;
-      document.getElementById('gif-container').classList.remove('hidden');
-    } else { throw new Error('no gif'); }
-  } catch(e) {
-    // Fallback: CSS effects
-    if (!isDraw) showFallbackFX(iWon);
+  if (gifUrl) {
+    document.getElementById('gif-img').src = gifUrl;
+    document.getElementById('gif-container').classList.remove('hidden');
+  } else {
+    document.getElementById('gif-container').classList.add('hidden');
   }
 
   if (!isDraw) showFallbackFX(iWon);
+
+  document.getElementById('play-again-btn').onclick = () => {
+    socket.emit('play_again', roomId);
+    resetGameState();
+  };
 }
 
 function showFallbackFX(win) {
@@ -951,19 +834,26 @@ function showFallbackFX(win) {
   setTimeout(() => layer.innerHTML = '', 5000);
 }
 
+function resetGameState() {
+  myScore = 0; oppScore = 0;
+  myThrows = 0; oppThrows = 0;
+  myTurn = false;
+  gameOver = false;
+  updateScores();
+  updateTurnUI();
+}
+
 // ══════════════════════════════════════════════════════════
-//  Audio (Web Audio API)
+//  Audio
 // ══════════════════════════════════════════════════════════
 let audioCtx = null;
 function getAudioCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
 }
-
 function playDiceSound() {
   try {
     const ctx = getAudioCtx();
-    // Multiple short knocks
     for (let i = 0; i < 3; i++) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -978,12 +868,10 @@ function playDiceSound() {
     }
   } catch(e) {}
 }
-
 function playWinSound() {
   try {
     const ctx = getAudioCtx();
-    const notes = [523, 659, 784, 1047]; // C E G C
-    notes.forEach((freq, i) => {
+    [523, 659, 784, 1047].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       const t = ctx.currentTime + i * 0.18;
@@ -996,12 +884,10 @@ function playWinSound() {
     });
   } catch(e) {}
 }
-
 function playLoseSound() {
   try {
     const ctx = getAudioCtx();
-    const notes = [392, 349, 330, 294]; // descending
-    notes.forEach((freq, i) => {
+    [392, 349, 330, 294].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       const t = ctx.currentTime + i * 0.22;
@@ -1013,24 +899,6 @@ function playLoseSound() {
       osc.start(t); osc.stop(t + 0.6);
     });
   } catch(e) {}
-}
-
-// ══════════════════════════════════════════════════════════
-//  Reset
-// ══════════════════════════════════════════════════════════
-function resetGame() {
-  document.getElementById('fx-layer').innerHTML = '';
-  document.getElementById('chat').innerHTML = '';
-  document.getElementById('gif-container').classList.add('hidden');
-  document.getElementById('screen-result').classList.add('hidden');
-  document.getElementById('screen-start').classList.remove('hidden');
-  document.getElementById('created-panel').classList.add('hidden');
-  document.getElementById('join-panel').classList.add('hidden');
-  gameCode = null; myRole = null; myTurn = false;
-  players.p1.score = 0; players.p1.throws = 0;
-  players.p2.score = 0; players.p2.throws = 0;
-  if (socket?.connected) { socket.disconnect(); socket = null; }
-  fallbackMode = false;
 }
 </script>
 </body>
