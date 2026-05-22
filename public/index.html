@@ -136,19 +136,27 @@
     .hidden {
       display: none !important;
     }
+    input {
+      font-size: 16px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid #ccc;
+      flex: 1;
+    }
   </style>
 </head>
 <body>
   <div class="chat-container" id="chat"></div>
-  <div class="bottom-panel" id="bottom"></div>
+  <div class="bottom-panel" id="bottom">
+    <!-- dynamic content -->
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
-    // ========================
-    // НАСТРОЙКА: замени на username своего бота (без @)
-    // ========================
-    const BOT_USERNAME = 'kubikbbik_bot';
-    // ========================
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
 
     const chat = document.getElementById('chat');
     const bottom = document.getElementById('bottom');
@@ -156,24 +164,6 @@
 
     let roomId = null;
     let myId = null;
-    let myName = 'Вы';
-
-    // Пытаемся загрузить Telegram Web App API
-    let tg = null;
-    try {
-      // Проверяем, есть ли объект Telegram
-      if (window.Telegram && window.Telegram.WebApp) {
-        tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
-        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-          const user = tg.initDataUnsafe.user;
-          myName = user.first_name || 'Вы';
-        }
-      }
-    } catch (e) {
-      console.log('Telegram WebApp API не загружен, работаем в браузере');
-    }
 
     function addSystemMessage(text) {
       const div = document.createElement('div');
@@ -183,10 +173,22 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
+    function addMessage(side, content, isHtml = false) {
+      const div = document.createElement('div');
+      div.className = `message message-${side}`;
+      if (isHtml) {
+        div.innerHTML = content;
+      } else {
+        div.textContent = content;
+      }
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
     function addDiceMessage(side, number) {
       const div = document.createElement('div');
-      div.className = 'message message-' + side;
-      div.innerHTML = '<span class="dice-number">' + number + '</span><span class="dice-label">кубик</span>';
+      div.className = `message message-${side}`;
+      div.innerHTML = `<span class="dice-number">${number}</span><span class="dice-label">кубик</span>`;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
@@ -194,47 +196,47 @@
     function addSumMessage(sum) {
       const div = document.createElement('div');
       div.className = 'message sum-message';
-      div.textContent = 'Сумма: ' + sum;
+      div.textContent = `Сумма: ${sum}`;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
 
     function addGifMessage(side, gifUrl) {
       const div = document.createElement('div');
-      div.className = 'message message-' + side + ' gif-message';
-      div.innerHTML = '<img src="' + gifUrl + '" alt="gif">';
+      div.className = `message message-${side} gif-message`;
+      div.innerHTML = `<img src="${gifUrl}" alt="gif">`;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
 
     function renderWaitingForPlayer() {
-      addSystemMessage('Ожидание второго игрока...');
-      bottom.innerHTML = '<button class="btn" id="inviteBtn">📨 Пригласить друга</button>';
-      document.getElementById('inviteBtn').addEventListener('click', function() {
-        var link = 'https://t.me/' + BOT_USERNAME + '?startapp=' + roomId;
-        if (tg && tg.openTelegramLink) {
-          tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(link));
-        } else {
-          prompt('Отправь эту ссылку другу:', link);
-        }
+      addSystemMessage(`Код комнаты: ${roomId}`);
+      bottom.innerHTML = `
+        <button class="btn" id="copyCodeBtn">📋 Скопировать код</button>
+        <span style="font-size:14px;">Отправь код другу, чтобы он присоединился</span>
+      `;
+      document.getElementById('copyCodeBtn').addEventListener('click', () => {
+        navigator.clipboard.writeText(roomId).then(() => {
+          tg.showAlert('Код скопирован! Отправь его другу.');
+        });
       });
     }
 
     function renderYourTurn() {
-      bottom.innerHTML = '<button class="btn dice-btn" id="rollBtn">🎲 Бросить</button>';
-      document.getElementById('rollBtn').addEventListener('click', function() {
+      bottom.innerHTML = `<button class="btn dice-btn" id="rollBtn">🎲 Бросить</button>`;
+      document.getElementById('rollBtn').addEventListener('click', () => {
         socket.emit('roll_dice', roomId);
-        bottom.innerHTML = '<span class="waiting-text">Бросаем...</span>';
+        bottom.innerHTML = `<span class="waiting-text">Бросаем...</span>`;
       });
     }
 
     function renderOpponentTurn() {
-      bottom.innerHTML = '<span class="waiting-text">Ход соперника...</span>';
+      bottom.innerHTML = `<span class="waiting-text">Ход соперника...</span>`;
     }
 
     function renderGameOver(winnerId, p1, p2, gifs) {
-      bottom.innerHTML = '<button class="btn" id="playAgainBtn">🔄 Сыграть ещё</button>';
-      document.getElementById('playAgainBtn').addEventListener('click', function() {
+      bottom.innerHTML = `<button class="btn" id="playAgainBtn">🔄 Сыграть ещё</button>`;
+      document.getElementById('playAgainBtn').addEventListener('click', () => {
         socket.emit('play_again', roomId);
         chat.innerHTML = '';
       });
@@ -244,92 +246,97 @@
         addGifMessage('right', gifs[p1.id]);
         addGifMessage('left', gifs[p2.id]);
       } else {
-        var winnerName = winnerId === p1.id ? 'Игрок 1' : 'Игрок 2';
-        var loserId = winnerId === p1.id ? p2.id : p1.id;
-        addSystemMessage(winnerName + ' победил! 🎉');
+        const winnerName = winnerId === p1.id ? 'Игрок 1' : 'Игрок 2';
+        const loserName = winnerId === p1.id ? 'Игрок 2' : 'Игрок 1';
+        addSystemMessage(`${winnerName} победил! 🎉`);
         addGifMessage('right', gifs[winnerId]);
-        addGifMessage('left', gifs[loserId]);
+        addGifMessage('left', gifs[winnerId === p1.id ? p2.id : p1.id]);
       }
     }
 
-    function renderGameOver2(data) {
-      renderGameOver(data.winner, data.p1, data.p2, data.gifs);
-    }
-
-    // Определяем deep link параметр
-    var startParam = null;
-    if (tg && tg.initDataUnsafe) {
-      // Пробуем взять start_param из Telegram, затем из URL (?startapp=), затем из хеша
-let startParam = tg.initDataUnsafe.start_param;
-if (!startParam) {
-  const urlParams = new URLSearchParams(window.location.search);
-  startParam = urlParams.get('startapp');
-}
-if (!startParam) {
-  startParam = window.location.hash.substring(1); // на случай, если мы передадим через хеш
-}
-
-    if (startParam) {
-      roomId = startParam;
-      socket.emit('join_room', roomId, function(res) {
-        if (res.error) {
-          addSystemMessage('Ошибка: ' + res.error);
-        } else {
-          addSystemMessage('Вы присоединились к комнате');
+    function showJoinInput() {
+      bottom.innerHTML = `
+        <input type="text" id="roomCodeInput" placeholder="Введите код" maxlength="6">
+        <button class="btn" id="joinBtn">Войти</button>
+      `;
+      document.getElementById('joinBtn').addEventListener('click', () => {
+        const code = document.getElementById('roomCodeInput').value.trim();
+        if (code) {
+          roomId = code;
+          socket.emit('join_room', roomId, (res) => {
+            if (res.error) {
+              addSystemMessage('Ошибка: ' + res.error);
+            } else {
+              addSystemMessage('Вы присоединились к комнате');
+              bottom.innerHTML = '';
+            }
+          });
         }
       });
-    } else {
-      socket.emit('create_room', function(res) {
-        roomId = res.roomId;
-        addSystemMessage('Комната создана. Код: ' + roomId);
-        renderWaitingForPlayer();
-      });
     }
 
-    socket.on('connect', function() {
+    function showStartChoice() {
+      bottom.innerHTML = `
+        <button class="btn" id="createBtn">🎲 Создать игру</button>
+        <button class="btn" id="joinInputBtn">🔢 Присоединиться по коду</button>
+      `;
+      document.getElementById('createBtn').addEventListener('click', () => {
+        socket.emit('create_room', (res) => {
+          roomId = res.roomId;
+          addSystemMessage('Комната создана');
+          renderWaitingForPlayer();
+        });
+      });
+      document.getElementById('joinInputBtn').addEventListener('click', showJoinInput);
+    }
+
+    // При загрузке показываем выбор
+    showStartChoice();
+
+    socket.on('connect', () => {
       myId = socket.id;
     });
 
-    socket.on('player_joined', function() {
+    socket.on('player_joined', () => {
       addSystemMessage('Игрок 2 присоединился!');
     });
 
-    socket.on('game_started', function(data) {
+    socket.on('game_started', (data) => {
       addSystemMessage('Игра началась!');
     });
 
-    socket.on('your_turn', function() {
+    socket.on('your_turn', () => {
       renderYourTurn();
     });
 
-    socket.on('opponent_turn', function() {
+    socket.on('opponent_turn', () => {
       renderOpponentTurn();
     });
 
-    socket.on('dice_rolled', function(data) {
-      var side = data.player === myId ? 'right' : 'left';
+    socket.on('dice_rolled', (data) => {
+      const side = data.player === myId ? 'right' : 'left';
       addDiceMessage(side, data.roll);
       if (data.dice.length === 3) {
-        var sum = data.dice.reduce(function(a, b) { return a + b; }, 0);
-        setTimeout(function() { addSumMessage(sum); }, 300);
+        const sum = data.dice.reduce((a, b) => a + b, 0);
+        setTimeout(() => addSumMessage(sum), 300);
       }
     });
 
-    socket.on('game_over', function(data) {
-      renderGameOver2(data);
+    socket.on('game_over', (data) => {
+      renderGameOver(data.winner, data.p1, data.p2, data.gifs);
     });
 
-    socket.on('player_left', function() {
+    socket.on('player_left', () => {
       addSystemMessage('Соперник покинул игру');
       bottom.innerHTML = '';
     });
 
-    socket.on('game_reset', function() {
+    socket.on('game_reset', () => {
       addSystemMessage('Новая игра!');
       chat.innerHTML = '';
     });
 
-    socket.on('error_message', function(msg) {
+    socket.on('error_message', (msg) => {
       addSystemMessage('⚠️ ' + msg);
     });
   </script>
