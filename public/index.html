@@ -2,24 +2,24 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Костяной Чат</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Dice Duel</title>
   <style>
     :root {
       --bg: #ffffff;
-      --text: #000000;
+      --text: #1c1c1e;
       --hint: #8e8e93;
       --link: #007aff;
       --btn: #007aff;
       --btn-text: #ffffff;
       --bubble-in: #e9e9ed;
       --bubble-out: #007aff;
-      --shadow: 0 2px 8px rgba(0,0,0,0.08);
+      --separator: rgba(60, 60, 67, 0.08);
     }
     body {
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
       background: var(--bg);
       color: var(--text);
       display: flex;
@@ -29,316 +29,347 @@
       user-select: none;
       -webkit-tap-highlight-color: transparent;
     }
-    /* Чат */
-    .chat-container {
+    .chat {
       flex: 1;
       overflow-y: auto;
-      padding: 12px 16px;
+      padding: 20px 16px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      background: var(--bg);
+      gap: 14px;
       scroll-behavior: smooth;
     }
-    .system-msg {
+    .sys-msg {
       text-align: center;
       color: var(--hint);
       font-size: 13px;
-      margin: 8px 0;
-      letter-spacing: -0.2px;
+      margin: 6px 0;
     }
     .bubble {
-      max-width: 78%;
-      padding: 10px 14px;
-      border-radius: 20px;
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 22px;
       font-size: 16px;
       line-height: 1.5;
-      word-break: break-word;
-      animation: bubbleIn 0.35s cubic-bezier(0.2, 0.9, 0.3, 1);
-      position: relative;
-      box-shadow: var(--shadow);
+      animation: bubbleIn 0.3s ease-out;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.05);
     }
-    .bubble-in {
+    .b-in {
       align-self: flex-start;
       background: var(--bubble-in);
-      border-bottom-left-radius: 4px;
       color: var(--text);
+      border-bottom-left-radius: 4px;
     }
-    .bubble-out {
+    .b-out {
       align-self: flex-end;
       background: var(--bubble-out);
-      border-bottom-right-radius: 4px;
       color: #fff;
+      border-bottom-right-radius: 4px;
     }
     @keyframes bubbleIn {
-      from { opacity: 0; transform: translateY(12px) scale(0.97); }
+      from { opacity: 0; transform: translateY(10px) scale(0.96); }
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
-    .dice-result {
+    /* Кубик */
+    .dice-wrap {
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-size: 18px;
-      font-weight: 600;
+      gap: 12px;
     }
-    .dice-dots {
-      font-size: 42px;
-      line-height: 1;
-      letter-spacing: 2px;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.2);
-      animation: rollIn 0.5s ease-out;
+    .dice-scene {
+      width: 50px; height: 50px;
+      perspective: 300px;
     }
-    @keyframes rollIn {
-      0% { transform: rotateZ(-20deg) scale(0.5); opacity: 0; }
-      60% { transform: rotateZ(5deg) scale(1.1); }
-      100% { transform: rotateZ(0deg) scale(1); opacity: 1; }
+    .dice-cube {
+      width: 100%; height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 1s cubic-bezier(0.2, 0.8, 0.4, 1);
     }
+    .dice-cube.rolling {
+      animation: rollAnim 0.8s cubic-bezier(0.2, 0.8, 0.4, 1);
+    }
+    @keyframes rollAnim {
+      0% { transform: rotate3d(1, 1, 0, 0deg); }
+      25% { transform: rotate3d(1, -1, 0, 180deg); }
+      50% { transform: rotate3d(-1, 1, 0, 360deg); }
+      75% { transform: rotate3d(1, 1, 0, 540deg); }
+      100% { transform: rotate3d(0, 1, 0, 720deg); }
+    }
+    .face {
+      position: absolute;
+      width: 50px; height: 50px;
+      background: #fff;
+      border: 1px solid #d1d1d6;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: bold;
+      box-shadow: inset 0 0 6px rgba(0,0,0,0.1);
+    }
+    .face.front  { transform: translateZ(25px); }
+    .face.back   { transform: rotateY(180deg) translateZ(25px); }
+    .face.right  { transform: rotateY(90deg) translateZ(25px); }
+    .face.left   { transform: rotateY(-90deg) translateZ(25px); }
+    .face.top    { transform: rotateX(90deg) translateZ(25px); }
+    .face.bottom { transform: rotateX(-90deg) translateZ(25px); }
     .sum-badge {
       background: #f5a623;
       color: #fff;
       font-weight: bold;
-      padding: 8px 16px;
-      border-radius: 16px;
+      padding: 8px 18px;
+      border-radius: 20px;
       align-self: center;
       font-size: 18px;
-      box-shadow: 0 2px 6px rgba(245,166,35,0.3);
       margin-top: 4px;
     }
-    .emoji-big {
-      font-size: 48px;
+    /* Гифки и эмоции */
+    .gif-msg {
+      align-self: center;
+      background: transparent !important;
+      box-shadow: none;
+      padding: 0;
+    }
+    .gif-msg img {
+      width: 160px;
+      border-radius: 16px;
+    }
+    .big-emoji {
+      font-size: 56px;
       text-align: center;
       align-self: center;
-      margin: 6px 0;
     }
-    .bottom-bar {
-      padding: 12px 16px;
-      background: #f9f9f9;
+    /* Нижняя панель */
+    .bottom {
+      padding: 16px;
+      background: var(--bg);
+      border-top: 1px solid var(--separator);
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 10px;
-      border-top: 1px solid rgba(0,0,0,0.05);
-      backdrop-filter: blur(10px);
       flex-wrap: wrap;
-      min-height: 60px;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.02);
     }
     .btn {
       background: var(--btn);
       color: var(--btn-text);
       border: none;
-      border-radius: 20px;
-      padding: 12px 24px;
+      border-radius: 18px;
+      padding: 14px 24px;
       font-size: 16px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.15s;
-      box-shadow: 0 2px 6px rgba(0,122,255,0.25);
-      letter-spacing: -0.2px;
     }
-    .btn:active { transform: scale(0.96); opacity: 0.9; }
+    .btn:active { transform: scale(0.95); opacity: 0.9; }
     .btn-outline {
       background: transparent;
       color: var(--btn);
       border: 2px solid var(--btn);
-      box-shadow: none;
     }
-    .dice-btn {
+    .btn-dice {
       background: #ff3b30;
-      font-size: 18px;
-      padding: 14px 30px;
-      border-radius: 24px;
+      font-size: 20px;
+      padding: 16px 32px;
+      border-radius: 26px;
       animation: pulse 2s infinite;
-      box-shadow: 0 4px 12px rgba(255,59,48,0.4);
+      box-shadow: 0 4px 15px rgba(255,59,48,0.4);
     }
     @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,48,0.5); }
-      50% { box-shadow: 0 0 0 12px rgba(255,59,48,0); }
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,48,0.6); }
+      50% { box-shadow: 0 0 0 14px rgba(255,59,48,0); }
     }
-    .waiting {
+    .wait {
       color: var(--hint);
       font-size: 16px;
       display: flex;
       align-items: center;
       gap: 4px;
     }
-    .dots::after {
-      content: '';
-      animation: dotAnim 1.5s steps(4, end) infinite;
-    }
-    @keyframes dotAnim {
-      0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; }
-    }
+    .dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
+    @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
     input {
       font-size: 16px;
-      padding: 12px 16px;
-      border-radius: 20px;
+      padding: 14px 18px;
+      border-radius: 18px;
       border: 1px solid #ddd;
+      background: #f9f9f9;
       flex: 1;
       outline: none;
-      background: #fff;
-      box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
     }
     .code-box {
       font-size: 32px;
       font-weight: 700;
       letter-spacing: 6px;
-      background: #f0f0f5;
+      background: #f2f2f7;
       padding: 10px 20px;
       border-radius: 16px;
-      color: var(--text);
       text-align: center;
       margin: 4px 0;
     }
-    .anim-layer {
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none; z-index: 999;
-    }
+    /* Конфетти и дождь */
+    .anim-layer { position: fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:100; }
     .confetti {
       position: absolute;
       width: 10px; height: 10px;
       border-radius: 3px;
-      animation: confettiFall 1.6s ease-out forwards;
+      animation: fall 1.6s ease-out forwards;
     }
-    @keyframes confettiFall {
-      0% { transform: translateY(-100px) rotate(0deg); opacity: 1; }
-      100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+    @keyframes fall {
+      0% { transform: translateY(-100px) rotate(0deg); opacity:1; }
+      100% { transform: translateY(110vh) rotate(720deg); opacity:0; }
     }
     .rain-emoji {
       position: absolute;
       font-size: 28px;
-      animation: rainDrop 2s ease-in forwards;
+      animation: rain 2s ease-in forwards;
       opacity: 0;
     }
-    @keyframes rainDrop {
-      0% { transform: translateY(-40px); opacity: 1; }
-      80% { opacity: 1; }
-      100% { transform: translateY(105vh); opacity: 0; }
+    @keyframes rain {
+      0% { transform: translateY(-40px); opacity:1; }
+      80% { opacity:1; }
+      100% { transform: translateY(105vh); opacity:0; }
     }
   </style>
 </head>
 <body>
-  <div class="chat-container" id="chat"></div>
-  <div class="anim-layer" id="animLayer"></div>
-  <div class="bottom-bar" id="bottom"></div>
+<div class="anim-layer" id="animLayer"></div>
+<div class="chat" id="chat"></div>
+<div class="bottom" id="bottom"></div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script>
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+  const tg = window.Telegram.WebApp;
+  tg.ready();
+  tg.expand();
 
-    const chat = document.getElementById('chat');
-    const bottom = document.getElementById('bottom');
-    const animLayer = document.getElementById('animLayer');
-    const socket = io();
-    let roomId = null, myId = null;
+  const chat = document.getElementById('chat');
+  const bottom = document.getElementById('bottom');
+  const animLayer = document.getElementById('animLayer');
+  const socket = io();
+  let roomId = null, myId = null;
 
-    // Звуки
-    function tone(freq, type, dur, vol=0.2) {
-      try {
-        const ctx = new (window.AudioContext||window.webkitAudioContext)();
-        const o = ctx.createOscillator(), g = ctx.createGain();
-        o.type=type; o.frequency.value=freq; g.gain.setValueAtTime(vol,ctx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur);
-        o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime+dur);
-      } catch(e){}
-    }
-    function sfxRoll() { tone(180,'triangle',0.25,0.25); setTimeout(()=>tone(250,'triangle',0.2,0.2),150); }
-    function sfxWin() { tone(523,'square',0.12,0.3); setTimeout(()=>tone(659,'square',0.12,0.3),120); setTimeout(()=>tone(784,'square',0.15,0.4),240); }
-    function sfxLose() { tone(200,'sawtooth',0.4,0.25); setTimeout(()=>tone(150,'sawtooth',0.5,0.35),200); }
+  // Грань кубика с точками
+  function getDiceFaceHtml(value) {
+    const dots = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+    return dots[value-1];
+  }
 
-    // Точки кубика
-    const diceFaces = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+  // Звуки
+  function tone(freq,type,dur,vol=0.2){try{let ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(vol,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur);o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+dur)}catch(e){}}
+  function sfxRoll(){tone(180,'triangle',0.25,0.2);setTimeout(()=>tone(250,'triangle',0.2,0.2),150)}
+  function sfxWin(){tone(523,'square',0.12,0.3);setTimeout(()=>tone(659,'square',0.12,0.3),120);setTimeout(()=>tone(784,'square',0.15,0.4),240)}
+  function sfxLose(){tone(200,'sawtooth',0.4,0.25);setTimeout(()=>tone(150,'sawtooth',0.5,0.35),200)}
 
-    // Анимации
-    function confettiBurst() {
-      const colors=['#ff3b30','#ff9500','#ffcc00','#34c759','#007aff','#af52de','#ff2d55'];
-      for(let i=0;i<50;i++){
-        setTimeout(()=>{
-          const el=document.createElement('div'); el.className='confetti';
-          el.style.left=Math.random()*100+'%';
-          el.style.background=colors[Math.floor(Math.random()*colors.length)];
-          el.style.animationDuration=(Math.random()*1.2+1.2)+'s';
-          animLayer.appendChild(el); setTimeout(()=>el.remove(),2000);
-        },i*12);
+  // Анимации
+  function confettiBurst(){let colors=['#ff3b30','#ff9500','#ffcc00','#34c759','#007aff','#af52de'];for(let i=0;i<50;i++){setTimeout(()=>{let el=document.createElement('div');el.className='confetti';el.style.left=Math.random()*100+'%';el.style.background=colors[Math.floor(Math.random()*colors.length)];el.style.animationDuration=(Math.random()*1.2+1.2)+'s';animLayer.appendChild(el);setTimeout(()=>el.remove(),2000)},i*12)}}
+  function rainEmoji(emoji){for(let i=0;i<20;i++){setTimeout(()=>{let el=document.createElement('div');el.className='rain-emoji';el.textContent=emoji;el.style.left=Math.random()*90+'%';el.style.animationDuration=(Math.random()*1.5+1.5)+'s';animLayer.appendChild(el);setTimeout(()=>el.remove(),2500)},i*80)}}
+
+  // ГИФКИ: Пытаемся загрузить из Giphy, при ошибке — конфетти/дождь
+  async function getRandomGif(tag) {
+    const apiKey = 'p6l8yF0x9aPR5bLxH5z3v6q2wR1t4y7j'; // Демо-ключ
+    try {
+      const resp = await fetch(`https://api.giphy.com/v1/gifs/random?api_key=${apiKey}&tag=${tag}&rating=g`);
+      const data = await resp.json();
+      if (data.data && data.data.images && data.data.images.fixed_height) {
+        return data.data.images.fixed_height.url;
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  async function showGameResult(winnerId, p1, p2) {
+    bottom.innerHTML = `<button class="btn" id="againBtn">🔄 Играть ещё</button>`;
+    document.getElementById('againBtn').onclick = () => { socket.emit('play_again', roomId); chat.innerHTML=''; animLayer.innerHTML=''; };
+
+    if (winnerId === null) {
+      sysMsg('Ничья! 🤝');
+      addBigEmoji('🤝', 'Ничья');
+      confettiBurst();
+    } else {
+      const isWinner = winnerId === myId;
+      const [winnerEmoji, loserEmoji] = isWinner ? ['🏆', '😿'] : ['😿', '🏆'];
+      const [winnerText, loserText] = isWinner ? ['Победитель', 'Проиграл'] : ['Проиграл', 'Победитель'];
+
+      // Загружаем гифки
+      const [winnerGif, loserGif] = await Promise.all([
+        getRandomGif('happy'),
+        getRandomGif('sad')
+      ]);
+
+      if (isWinner) {
+        sysMsg('Вы победили! 🎉');
+        if (winnerGif) addGifMessage('out', winnerGif);
+        else addBigEmoji(winnerEmoji, winnerText);
+        if (loserGif) addGifMessage('in', loserGif);
+        else addBigEmoji(loserEmoji, loserText);
+        confettiBurst();
+        sfxWin();
+      } else {
+        sysMsg('Вы проиграли... 😢');
+        if (winnerGif) addGifMessage('in', winnerGif);
+        else addBigEmoji(winnerEmoji, winnerText);
+        if (loserGif) addGifMessage('out', loserGif);
+        else addBigEmoji(loserEmoji, loserText);
+        rainEmoji('💧');
+        sfxLose();
       }
     }
-    function rain(emoji) {
-      for(let i=0;i<18;i++){
-        setTimeout(()=>{
-          const el=document.createElement('div'); el.className='rain-emoji'; el.textContent=emoji;
-          el.style.left=Math.random()*90+'%'; el.style.animationDuration=(Math.random()*1.3+1.5)+'s';
-          animLayer.appendChild(el); setTimeout(()=>el.remove(),2500);
-        },i*70);
-      }
-    }
+  }
 
-    // Сообщения
-    function sysMsg(t){ const d=document.createElement('div'); d.className='system-msg'; d.textContent=t; chat.appendChild(d); chat.scrollTop=chat.scrollHeight; }
-    function bubble(side,html){
-      const d=document.createElement('div'); d.className=`bubble bubble-${side}`; d.innerHTML=html; chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
-    }
-    function diceBubble(side,value){
-      bubble(side,`<div class="dice-result"><span class="dice-dots">${diceFaces[value-1]}</span> <span style="font-size:24px;">${value}</span></div>`);
-    }
-    function sumBadge(sum){
-      const d=document.createElement('div'); d.className='sum-badge'; d.textContent=`Сумма: ${sum}`; chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
-    }
-    function bigEmoji(emoji,txt){
-      const d=document.createElement('div'); d.className='emoji-big'; d.innerHTML=`${emoji}<br><span style="font-size:14px;color:var(--hint);">${txt}</span>`; chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
-    }
+  // Сообщения
+  function sysMsg(t) { let d=document.createElement('div'); d.className='sys-msg'; d.textContent=t; chat.appendChild(d); chat.scrollTop=chat.scrollHeight; }
+  function addBubble(side, html) { let d=document.createElement('div'); d.className=`bubble b-${side}`; d.innerHTML=html; chat.appendChild(d); chat.scrollTop=chat.scrollHeight; }
+  function addDiceBubble(side, value) {
+    addBubble(side, `<div class="dice-wrap"><div class="dice-scene"><div class="dice-cube"><div class="face front">${getDiceFaceHtml(value)}</div><div class="face back">${getDiceFaceHtml(value)}</div><div class="face right">${getDiceFaceHtml(value)}</div><div class="face left">${getDiceFaceHtml(value)}</div><div class="face top">${getDiceFaceHtml(value)}</div><div class="face bottom">${getDiceFaceHtml(value)}</div></div></div><span style="font-size:22px;font-weight:bold;">${value}</span></div>`);
+  }
+  function addSumBadge(sum) { let d=document.createElement('div'); d.className='sum-badge'; d.textContent=`Сумма: ${sum}`; chat.appendChild(d); chat.scrollTop=chat.scrollHeight; }
+  function addBigEmoji(emoji, txt) { let d=document.createElement('div'); d.className='big-emoji'; d.innerHTML=`${emoji}<br><span style="font-size:14px;color:var(--hint);">${txt}</span>`; chat.appendChild(d); chat.scrollTop=chat.scrollHeight; }
+  function addGifMessage(side, url) {
+    let d=document.createElement('div'); d.className='bubble gif-msg'; d.innerHTML=`<img src="${url}" alt="gif">`; chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
+  }
 
-    // Интерфейс
-    function showWait(code){
-      sysMsg(`Код комнаты:`);
-      const d=document.createElement('div'); d.className='code-box'; d.textContent=code; chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
-      bottom.innerHTML=`<button class="btn" id="copyBtn">📋 Скопировать код</button><span style="font-size:14px;">Поделись с другом</span>`;
-      document.getElementById('copyBtn').onclick=()=>navigator.clipboard.writeText(code).then(()=>tg.showAlert('Код скопирован!'));
-    }
-    function showYourTurn(){ bottom.innerHTML=`<button class="btn dice-btn" id="rollBtn">🎲 Бросить</button>`; document.getElementById('rollBtn').onclick=()=>{ socket.emit('roll_dice',roomId); sfxRoll(); bottom.innerHTML=`<div class="waiting">Бросаем<span class="dots"></span></div>`; }; }
-    function showOppTurn(){ bottom.innerHTML=`<div class="waiting">🎲 Ход соперника<span class="dots"></span></div>`; }
-    function showGameOver(winnerId,p1,p2){
-      bottom.innerHTML=`<button class="btn" id="againBtn">🔄 Играть ещё</button>`;
-      document.getElementById('againBtn').onclick=()=>{ socket.emit('play_again',roomId); chat.innerHTML=''; animLayer.innerHTML=''; };
-      if(winnerId===null){
-        sysMsg('Ничья! 🤝'); bigEmoji('🤝','Ничья'); confettiBurst();
-      }else if(winnerId===myId){
-        sysMsg('Вы победили! 🏆'); bigEmoji('🏆','Победитель'); bigEmoji('😿','Проиграл'); confettiBurst(); sfxWin();
-      }else{
-        sysMsg('Вы проиграли... 😢'); bigEmoji('😿','Проиграл'); bigEmoji('🏆','Победитель'); rain('💧'); sfxLose();
-      }
-    }
-    function joinInput(){
-      bottom.innerHTML=`<input id="codeInput" placeholder="Введите код" maxlength="6"><button class="btn" id="joinBtn">Войти</button>`;
-      document.getElementById('joinBtn').onclick=()=>{
-        const c=document.getElementById('codeInput').value.trim();
-        if(c){ roomId=c; socket.emit('join_room',roomId,r=>{ if(r.error)sysMsg('Ошибка: '+r.error); else{sysMsg('Присоединились!'); bottom.innerHTML='';} }); }
-      };
-    }
-    function startChoice(){
-      bottom.innerHTML=`<button class="btn" id="createBtn">🎲 Создать игру</button><button class="btn btn-outline" id="joinInputBtn">🔢 Войти по коду</button>`;
-      document.getElementById('createBtn').onclick=()=>{ socket.emit('create_room',r=>{ roomId=r.roomId; sysMsg('Комната создана'); showWait(roomId); }); };
-      document.getElementById('joinInputBtn').onclick=joinInput;
-    }
-    startChoice();
+  // UI
+  function showWait(code) {
+    sysMsg(`Код комнаты:`);
+    let d=document.createElement('div'); d.className='code-box'; d.textContent=code; chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
+    bottom.innerHTML=`<button class="btn" id="copyBtn">📋 Скопировать код</button><span style="font-size:14px;">Поделись с другом</span>`;
+    document.getElementById('copyBtn').onclick=()=>navigator.clipboard.writeText(code).then(()=>tg.showAlert('Код скопирован!'));
+  }
+  function showYourTurn() { bottom.innerHTML=`<button class="btn btn-dice" id="rollBtn">🎲 Бросить</button>`; document.getElementById('rollBtn').onclick=()=>{ socket.emit('roll_dice',roomId); sfxRoll(); bottom.innerHTML=`<div class="wait">Бросаем<span class="dots"></span></div>`; }; }
+  function showOppTurn() { bottom.innerHTML=`<div class="wait">🎲 Ход соперника<span class="dots"></span></div>`; }
+  function joinInput() {
+    bottom.innerHTML=`<input id="codeInput" placeholder="Введите код" maxlength="6"><button class="btn" id="joinBtn">Войти</button>`;
+    document.getElementById('joinBtn').onclick=()=>{
+      let c=document.getElementById('codeInput').value.trim();
+      if(c){ roomId=c; socket.emit('join_room',roomId,r=>{ if(r.error)sysMsg('Ошибка: '+r.error); else{sysMsg('Присоединились!'); bottom.innerHTML='';} }); }
+    };
+  }
+  function startChoice() {
+    bottom.innerHTML=`<button class="btn" id="createBtn">🎲 Создать игру</button><button class="btn btn-outline" id="joinBtn">🔢 Войти по коду</button>`;
+    document.getElementById('createBtn').onclick=()=>{ socket.emit('create_room',r=>{ roomId=r.roomId; sysMsg('Комната создана'); showWait(roomId); }); };
+    document.getElementById('joinBtn').onclick=joinInput;
+  }
+  startChoice();
 
-    // Сокеты
-    socket.on('connect',()=>{ myId=socket.id; });
-    socket.on('player_joined',()=>sysMsg('Игрок 2 присоединился!'));
-    socket.on('game_started',()=>sysMsg('Игра началась!'));
-    socket.on('your_turn',showYourTurn);
-    socket.on('opponent_turn',showOppTurn);
-    socket.on('dice_rolled',data=>{
-      const side=data.player===myId?'out':'in';
-      diceBubble(side,data.roll);
-      if(data.dice.length===3){ const s=data.dice.reduce((a,b)=>a+b,0); setTimeout(()=>sumBadge(s),350); }
-    });
-    socket.on('game_over',data=>showGameOver(data.winner,data.p1,data.p2));
-    socket.on('player_left',()=>{ sysMsg('Соперник вышел'); bottom.innerHTML=''; });
-    socket.on('game_reset',()=>{ sysMsg('Новая игра!'); chat.innerHTML=''; animLayer.innerHTML=''; });
-    socket.on('error_message',m=>sysMsg('⚠️ '+m));
-  </script>
+  // Сокеты
+  socket.on('connect',()=>{ myId=socket.id; });
+  socket.on('player_joined',()=>sysMsg('Игрок 2 присоединился!'));
+  socket.on('game_started',()=>sysMsg('Игра началась!'));
+  socket.on('your_turn',showYourTurn);
+  socket.on('opponent_turn',showOppTurn);
+  socket.on('dice_rolled',data=>{
+    let side=data.player===myId?'out':'in';
+    addDiceBubble(side, data.roll);
+    if(data.dice.length===3){ let s=data.dice.reduce((a,b)=>a+b,0); setTimeout(()=>addSumBadge(s),350); }
+  });
+  socket.on('game_over',data=>showGameResult(data.winner, data.p1, data.p2));
+  socket.on('player_left',()=>{ sysMsg('Соперник вышел'); bottom.innerHTML=''; });
+  socket.on('game_reset',()=>{ sysMsg('Новая игра!'); chat.innerHTML=''; animLayer.innerHTML=''; });
+  socket.on('error_message',m=>sysMsg('⚠️ '+m));
+</script>
 </body>
 </html>
