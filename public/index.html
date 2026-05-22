@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Костяной Чат</title>
+  <style>
+    :root {
+      --tg-theme-bg: #ffffff;
+      --tg-theme-text: #000000;
+      --tg-theme-hint: #999999;
+      --tg-theme-link: #2481cc;
+      --tg-theme-button: #2481cc;
+      --tg-theme-button-text: #ffffff;
+      --tg-theme-secondary-bg: #f0f0f0;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: var(--tg-theme-bg);
+      color: var(--tg-theme-text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .system-message {
+      text-align: center;
+      color: var(--tg-theme-hint);
+      font-size: 14px;
+      margin: 8px 0;
+    }
+    .message {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 16px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .message-left {
+      align-self: flex-start;
+      background: var(--tg-theme-secondary-bg);
+      border-bottom-left-radius: 4px;
+    }
+    .message-right {
+      align-self: flex-end;
+      background: var(--tg-theme-link);
+      color: var(--tg-theme-button-text);
+      border-bottom-right-radius: 4px;
+    }
+    .dice-number {
+      font-size: 48px;
+      font-weight: bold;
+      text-align: center;
+      display: block;
+    }
+    .dice-label {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+    .sum-message {
+      background: #ffe0b2;
+      color: #333;
+      align-self: center;
+      font-weight: bold;
+    }
+    .gif-message {
+      background: transparent;
+      padding: 4px;
+      max-width: 70%;
+    }
+    .gif-message img {
+      width: 100%;
+      border-radius: 12px;
+    }
+    .bottom-panel {
+      padding: 12px 16px;
+      background: var(--tg-theme-secondary-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      border-top: 1px solid rgba(0,0,0,0.1);
+    }
+    .btn {
+      background: var(--tg-theme-button);
+      color: var(--tg-theme-button-text);
+      border: none;
+      border-radius: 12px;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .btn:active {
+      transform: scale(0.96);
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    .dice-btn {
+      background: #f44336;
+      font-size: 32px;
+      padding: 8px 20px;
+      border-radius: 20px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(244,67,54,0.4); }
+      70% { box-shadow: 0 0 0 15px rgba(244,67,54,0); }
+      100% { box-shadow: 0 0 0 0 rgba(244,67,54,0); }
+    }
+    .waiting-text {
+      color: var(--tg-theme-hint);
+      font-style: italic;
+    }
+    .invite-link {
+      background: var(--tg-theme-secondary-bg);
+      padding: 12px;
+      border-radius: 12px;
+      text-align: center;
+      margin: 8px 0;
+    }
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-container" id="chat"></div>
+  <div class="bottom-panel" id="bottom"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // ========================
+    // НАСТРОЙКА: замени на username своего бота (без @)
+    // ========================
+    const BOT_USERNAME = 'kubikbbik_bot';
+    // ========================
+
+    const chat = document.getElementById('chat');
+    const bottom = document.getElementById('bottom');
+    const socket = io();
+
+    let roomId = null;
+    let myId = null;
+    let myName = 'Вы';
+
+    // Пытаемся загрузить Telegram Web App API
+    let tg = null;
+    try {
+      // Проверяем, есть ли объект Telegram
+      if (window.Telegram && window.Telegram.WebApp) {
+        tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+          const user = tg.initDataUnsafe.user;
+          myName = user.first_name || 'Вы';
+        }
+      }
+    } catch (e) {
+      console.log('Telegram WebApp API не загружен, работаем в браузере');
+    }
+
+    function addSystemMessage(text) {
+      const div = document.createElement('div');
+      div.className = 'system-message';
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function addDiceMessage(side, number) {
+      const div = document.createElement('div');
+      div.className = 'message message-' + side;
+      div.innerHTML = '<span class="dice-number">' + number + '</span><span class="dice-label">кубик</span>';
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function addSumMessage(sum) {
+      const div = document.createElement('div');
+      div.className = 'message sum-message';
+      div.textContent = 'Сумма: ' + sum;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function addGifMessage(side, gifUrl) {
+      const div = document.createElement('div');
+      div.className = 'message message-' + side + ' gif-message';
+      div.innerHTML = '<img src="' + gifUrl + '" alt="gif">';
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function renderWaitingForPlayer() {
+      addSystemMessage('Ожидание второго игрока...');
+      bottom.innerHTML = '<button class="btn" id="inviteBtn">📨 Пригласить друга</button>';
+      document.getElementById('inviteBtn').addEventListener('click', function() {
+        var link = 'https://t.me/' + BOT_USERNAME + '?startapp=' + roomId;
+        if (tg && tg.openTelegramLink) {
+          tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(link));
+        } else {
+          prompt('Отправь эту ссылку другу:', link);
+        }
+      });
+    }
+
+    function renderYourTurn() {
+      bottom.innerHTML = '<button class="btn dice-btn" id="rollBtn">🎲 Бросить</button>';
+      document.getElementById('rollBtn').addEventListener('click', function() {
+        socket.emit('roll_dice', roomId);
+        bottom.innerHTML = '<span class="waiting-text">Бросаем...</span>';
+      });
+    }
+
+    function renderOpponentTurn() {
+      bottom.innerHTML = '<span class="waiting-text">Ход соперника...</span>';
+    }
+
+    function renderGameOver(winnerId, p1, p2, gifs) {
+      bottom.innerHTML = '<button class="btn" id="playAgainBtn">🔄 Сыграть ещё</button>';
+      document.getElementById('playAgainBtn').addEventListener('click', function() {
+        socket.emit('play_again', roomId);
+        chat.innerHTML = '';
+      });
+
+      if (winnerId === null) {
+        addSystemMessage('Ничья! 🤝');
+        addGifMessage('right', gifs[p1.id]);
+        addGifMessage('left', gifs[p2.id]);
+      } else {
+        var winnerName = winnerId === p1.id ? 'Игрок 1' : 'Игрок 2';
+        var loserId = winnerId === p1.id ? p2.id : p1.id;
+        addSystemMessage(winnerName + ' победил! 🎉');
+        addGifMessage('right', gifs[winnerId]);
+        addGifMessage('left', gifs[loserId]);
+      }
+    }
+
+    function renderGameOver2(data) {
+      renderGameOver(data.winner, data.p1, data.p2, data.gifs);
+    }
+
+    // Определяем deep link параметр
+    var startParam = null;
+    if (tg && tg.initDataUnsafe) {
+      startParam = tg.initDataUnsafe.start_param;
+    }
+
+    if (startParam) {
+      roomId = startParam;
+      socket.emit('join_room', roomId, function(res) {
+        if (res.error) {
+          addSystemMessage('Ошибка: ' + res.error);
+        } else {
+          addSystemMessage('Вы присоединились к комнате');
+        }
+      });
+    } else {
+      socket.emit('create_room', function(res) {
+        roomId = res.roomId;
+        addSystemMessage('Комната создана. Код: ' + roomId);
+        renderWaitingForPlayer();
+      });
+    }
+
+    socket.on('connect', function() {
+      myId = socket.id;
+    });
+
+    socket.on('player_joined', function() {
+      addSystemMessage('Игрок 2 присоединился!');
+    });
+
+    socket.on('game_started', function(data) {
+      addSystemMessage('Игра началась!');
+    });
+
+    socket.on('your_turn', function() {
+      renderYourTurn();
+    });
+
+    socket.on('opponent_turn', function() {
+      renderOpponentTurn();
+    });
+
+    socket.on('dice_rolled', function(data) {
+      var side = data.player === myId ? 'right' : 'left';
+      addDiceMessage(side, data.roll);
+      if (data.dice.length === 3) {
+        var sum = data.dice.reduce(function(a, b) { return a + b; }, 0);
+        setTimeout(function() { addSumMessage(sum); }, 300);
+      }
+    });
+
+    socket.on('game_over', function(data) {
+      renderGameOver2(data);
+    });
+
+    socket.on('player_left', function() {
+      addSystemMessage('Соперник покинул игру');
+      bottom.innerHTML = '';
+    });
+
+    socket.on('game_reset', function() {
+      addSystemMessage('Новая игра!');
+      chat.innerHTML = '';
+    });
+
+    socket.on('error_message', function(msg) {
+      addSystemMessage('⚠️ ' + msg);
+    });
+  </script>
+</body>
+</html>
